@@ -69,6 +69,7 @@ class LayerNormalization(nn.Module):
 class MultiHeadAttention(nn.Module):
     """
     Crux of transformer, Multi Head Attention
+    Each token gets information from other token, 
     """
 
     def __init__(self, embdim, num_heads):
@@ -128,4 +129,21 @@ class MultiHeadAttention(nn.Module):
     
 
         
+class FeedForward(nn.Module):
 
+    """
+    A FeedForward layer,
+    In MHA, each token attends to another token so once we have infromation we use FeedForward to process those information
+    """
+
+    def __init__(self, embdim):
+        super().__init__()
+        self.ffd = nn.Sequential(
+            nn.Linear(embdim, 4*embdim),
+            nn.ReLU(),
+            nn.Linear(4*embdim, embdim)
+        )
+    
+    def forward(self, x):
+        # shape of x=> (B,T,C)
+        return self.ffd(x)

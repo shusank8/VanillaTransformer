@@ -50,4 +50,18 @@ class PositionalEmbeddings(nn.Module):
         return x
 
 
+class LayerNormalization(nn.Module):
 
+    """
+    Layer Norm Implementation
+    """
+    def __init__(self, embdim):
+        super().__init__()
+        self.alpha = nn.Parameter(torch.ones(embdim))
+        self.beta = nn.Parameter(torch.zeros(embdim))
+    
+    def forward(self, x):
+        xmean = x.mean(dim=-1, keepdim=True)
+        xstd  = x.std(dim=-1, keepdim=True)
+        out = self.alpha * ((x-xmean)/(xstd+1e-6)) + self.beta
+        return out

@@ -11,7 +11,43 @@ class InputEmbeddings(nn.Module):
     """
     def __init__(self, vocab_size, embdim):
         super().__init__()
+        self.embdim = embdim
         self.embeddings = nn.Embedding(vocab_size, embdim)
     
     def forward(self, x):
-        return self.embeddings(x)
+        # diving by (self.embdim)**(1/2) for nice numbers/to keep var small
+        return self.embeddings(x) / (self.embdim)**(1/2)
+
+
+class PositionalEmbeddings(nn.Module):
+
+    """
+    Transformers do not have understanding of positions. 
+    So we add positions vector to it.
+    (B,S,C) => (B,S,C)
+    """
+
+    def __init__(self, seq_len, embdim):
+        super().__init__()
+
+        # self.pe is a lookup matrix of shape (S, E), self.pe[i] represents ith seq
+        self.pe = torch.zeros(seq_len, embdim) 
+
+
+
+        self.pe[:, 0::2] = torch.sin(z)
+        self.pe[:, 1::2] = torch.cos(z)
+
+        # if you want we can unsqueeze to add B dim in self.pe if not it will broadcast
+        # in Vanilla Transformer, Positional Encodings are not learnt
+        self.pe = nn.Parameter(self.pe, requires_grad=True)
+    
+    def forward(self, x):
+        # x shape=> (B,T,C)
+        B,T,C = x.shape
+        # only adding upto T (Seq len)
+        x = x + self.pe[:T, :]
+        return x
+
+
+

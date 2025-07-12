@@ -44,32 +44,37 @@ class CustomDataset(Dataset):
 
         encoder_input = torch.cat(
             [
-                self.sos_token,
+                torch.tensor(self.sos_token),
                 torch.tensor(enc_input_tokens),
-                self.eos_token,
+                torch.tensor(self.eos_token),
                 torch.tensor(self.pad_token * enc_padding_len)
             ]
         )
 
         decoder_input = torch.cat(
             [
-                self.sos_token,
+                torch.tensor(self.sos_token),
                 torch.tensor(tgt_input_tokens),
-                torch.tensor(self.pad_token, dec_padding_len)
+                torch.tensor(self.pad_token * dec_padding_len)
             ]
         )
 
         label = torch.cat(
             [
                 torch.tensor(tgt_input_tokens),
-                self.eos_token,
+                torch.tensor(self.eos_token),
                 torch.tensor(self.pad_token * dec_padding_len)
             ]
         )
 
-        encoder_mask = (encoder_input!=self.pad_token).int()
-        decoder_mask = (decoder_input!=self.pad_token).int()
-        decoder_mask = decoder_mask & causal_mask(decoder_input.shape[0])
+        encoder_mask = (encoder_input!=torch.tensor(self.pad_token)).int()
+                
+        
+        decoder_mask = (decoder_input!=torch.tensor(self.pad_token)).int()
+        decoder_mask = decoder_mask & self.causal_mask(decoder_input.shape[0])
+
+
+        
 
         return {
             "encoder_input":encoder_input,
@@ -79,11 +84,11 @@ class CustomDataset(Dataset):
             "decoder_mask":decoder_mask
         }
     
-    def causal_mask(seqlen):
-        x = torch.ones(seqlen, seqlen)
-        x = torch.tril(x)
-        return x
-        
+    def causal_mask(self, seqlen):
+            x = torch.ones(seqlen, seqlen, dtype=torch.int32)
+            x = torch.tril(x)
+            return x
+
 
 
 

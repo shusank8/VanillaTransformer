@@ -147,3 +147,154 @@ class FeedForward(nn.Module):
     def forward(self, x):
         # shape of x=> (B,T,C)
         return self.ffd(x)
+
+
+class EncoderBlock(nn.Module):
+    """
+    A single encoder block
+    """
+    def __init__(self, embdim, num_heads):
+        self.attn = MultiHeadAttention(embdim, num_heads)
+        self.layernorm1 = LayerNormalization(embdim)
+        self.ffd = FeedForward(embdim)
+        self.layernorm2 = LayerNormalization(embdim)
+    
+    def forward(self, x, mask):
+        x = x + self.attn(x, x, x, mask)
+        x = self.layernorm1(x)
+        x = x + self.ffd(x)
+        x = self.layernorm2(x)
+        return x
+
+
+
+class DecoderBlock(nn.Module):
+    """
+    A single decoder block
+    """
+    def __init__(self, embdim, num_heads):
+        super().__init__()
+        self.selfattn = MultiHeadAttention(embdim, num_heads)
+        self.crossattn = MultiHeadAttention(embdim, num_heads)
+        self.ffd = FeedForward(embdim)
+        self.layernorm1 = LayerNormalization(embdim)
+        self.layernorm2 = LayerNormalization(embdim)
+        self.layernorm3 = LayerNormalization(embdim)
+    
+    def forward(self, x, encoder_output, src_mask, tgt_mask):
+        
+        # adding x to itself for skip connection
+        x = x + self.selfattn(x, x, x, tgt_mask)
+        x = self.layernorm1(x)
+        
+        x = x + self.crossattn(x, encoder_output, encoder_output, src_mask)
+        x = self.layernorm2(x)
+        
+        x = x + self.ffd(x)
+        return self.layernorm3(x)
+
+
+class Encoder(nn.Module):
+    """
+    Class to handle N Encoder Block
+    """
+
+    def __init__(self, layers):
+        self.layers = layers
+    
+    def forward(self, x, mask):
+        for layer in self.layers:
+            x  = layer(x, mask)
+        return x
+
+class Decoder(nn.Module):
+    """
+    Class to handle N Decoder Block
+    """
+
+    def __init__(self, layers):
+        super().__init__()
+        self.layers = layers
+    
+    def forward(self, x, encoder_output, src_mask, tgt_mask):
+        for layer in self.layers:
+            x  = layer(x, encoder_output, src_mask, tgt_mask)
+        return x
+
+class FinalProjection(nn.Module):
+    """
+    Final Projection to convert from embdim to vocab_size
+    """
+
+    def __init__(self, embdim, vocab_size):
+        super().__init__()
+        self.proj = nn.Linear(embdim, vocab_size)
+    
+    def forward(self, x):
+        # shape of x => (B,T,C)
+        # changing x to (B,T,VOCAB_SIZE)
+        return self.proj(x)
+
+
+
+
+class Transformer(nn.Module):
+    """
+    A class that builds everything
+    """
+
+    def __init__(self, encoder, decoder, src_emb, src_pos, tgt_emb, tgt_pos, finalproj):
+        super().__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+        self.src_emb = src_emb
+        self.src_pos = src_pos
+        self.tgt_emb = tgt_emb
+        self.tgt_pos = tgt_pos 
+        self.finalproj = finalproj
+
+    
+    def encoder_fun(self, x, mask):
+        x = self.src_emb(x)
+        x = self.src_pos(x)
+        return self.encoder(x, mask)
+
+    def decoder_fun(self, x, encoder_output, src_mask, tgt_mask):
+        x = self.tgt_emb(x)
+        x = self.tgt_pos(x)
+        return self.decoder(x, encoder_output, src_mask, tgt_mask)
+    
+    def projection(self, x):
+        return self.finalproj(x)
+
+
+
+
+def build_transformer(src_vocab_size, src_seq_len, tgt_vocab_size, tgt_seq_len, embdim, encoder_depth, decoder_depth, num_heads):
+    src_emb = InputEmbeddings(src_vocab_size, embdim)
+    src_pos = PositionalEmbeddings(src_seq_len, embdim)
+
+    tgt_emb = InputEmbeddings(tgt_vocab_size, embdim)
+    tgt_pos = PositionalEmbeddings(tgt_seq_len, embdim)
+
+    encoder_blocks = []
+
+    for _ in range(encoder_depth):
+        encoder_block = EncoderBlock(embdim, num_heads)
+        encoder_blocks.append(encoder_block)
+    
+    decoder_blocks = []
+
+    for _ in range(decoder_depth):
+        decoder_block = DecoderBlock(embdim, num_heads)
+        decoder_blocks.append(decoder_block)
+    
+    encoder = Encoder(nn.ModuleList(encoder_blocks))
+    decoder = Decoder(nn.ModuleList(decoder_blocks))
+    finalproj = FinalProjection(embdim, tgt_vocab_size)
+
+    transformer = Transformer(
+        encoder, decoder, src_emb, src_pos, tgt_emb, tgt_pos, finalproj
+    )
+
+    return transformer

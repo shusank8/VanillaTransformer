@@ -65,3 +65,67 @@ class LayerNormalization(nn.Module):
         xstd  = x.std(dim=-1, keepdim=True)
         out = self.alpha * ((x-xmean)/(xstd+1e-6)) + self.beta
         return out
+
+class MultiHeadAttention(nn.Module):
+    """
+    Crux of transformer, Multi Head Attention
+    """
+
+    def __init__(self, embdim, num_heads):
+        self.embdim = embdim
+        self.num_heads = num_heads
+        self.query = nn.Linear(embdim, embdim)
+        self.key = nn.Linear(embdim, embdim)
+        self.value = nn.Linear(embdim, embdim)
+        self.out = nn.Linear(embdim, embdim)
+        assert embdim%num_heads==0, "Embdim: {embdim} must be divisible by Num_Heads: {num_heads}"
+        self.num_heads = num_heads
+        self.head_dim = embdim // num_heads
+    
+    @staticmethod
+    def attention(q, k, v, mask):
+        
+        head_dim = q.shape[-1]
+        # attention
+        attention_scores = (q @ k.tranpose(-2, -1)) / (head_dim)**(1/2)
+
+        attention_scores.masked_fill_(mask==0, float("-inf"))
+
+        output = attention_scores @ v
+        return output, attention_scores
+
+
+
+    def forward(self, q, k, v, mask):
+        """
+        for encoder we only apply pad mask and for inital MHA we apply causal mask + pad mask
+        i have applied & operator between causal mask and pad mask 
+        resulting into a single mask
+
+        for cross attention, q is from the target and k and v comes from source, mask also comes from source. 
+        """
+
+        # q,k,v size => (B,T,C)
+        B,T,C = q.shape
+        q = self.query(q)
+        k = self.key(k)
+        v = self.value(v)
+        # q,k,v size => (B,T,C)
+
+        # resizing 
+        q = q.view(q.shape[0], q.shape[1], self.num_heads, self.head_dim).tranpose(1,2)
+        k = k.view(k.shape[0], k.shape[1], self.num_heads, self.head_dim).tranpose(1,2)
+        v = v.view(v.shape[0], v.shape[1], self.num_heads, self.head_dim).tranpose(1,2)
+
+        output, attention = MultiHeadAttention.attention(q, k, v, mask)
+
+        # shape of output=> (B, NH, T, H)
+        # shape of attention => (B, NH, SQ, SQ)
+        # shape of output => (B,T,C)
+        output = output.tranpose(1,2).contiguous().view(B,T,C)
+
+        return self.out(output)
+    
+
+        
+

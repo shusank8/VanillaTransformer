@@ -33,7 +33,12 @@ class PositionalEmbeddings(nn.Module):
         # self.pe is a lookup matrix of shape (S, E), self.pe[i] represents ith seq
         self.pe = torch.zeros(seq_len, embdim) 
 
-
+        # positions is just the sequence of the position from 0,seq_len, shape => (SEQ_LEN, 1)
+        positions = torch.arange(0, seq_len, dtype=torch.float32).unsqueeze(1)
+        # SHAPE(256)
+        emb_skip_dim = torch.arange(0, embdim, step=2, dtype=torch.float32)
+        # (seqlen, 1) / (256) => (seqlen, 256)
+        z = positions / (10000 ** (emb_skip_dim / embdim))
 
         self.pe[:, 0::2] = torch.sin(z)
         self.pe[:, 1::2] = torch.cos(z)
@@ -73,6 +78,7 @@ class MultiHeadAttention(nn.Module):
     """
 
     def __init__(self, embdim, num_heads):
+        super().__init__()
         self.embdim = embdim
         self.num_heads = num_heads
         self.query = nn.Linear(embdim, embdim)
@@ -88,9 +94,11 @@ class MultiHeadAttention(nn.Module):
         
         head_dim = q.shape[-1]
         # attention
-        attention_scores = (q @ k.tranpose(-2, -1)) / (head_dim)**(1/2)
+        attention_scores = (q @ k.transpose(-2, -1)) / (head_dim)**(1/2)
 
         attention_scores.masked_fill_(mask==0, float("-inf"))
+
+        attention_scores  = attention_scores.softmax(dim=-1)
 
         output = attention_scores @ v
         return output, attention_scores
@@ -114,16 +122,16 @@ class MultiHeadAttention(nn.Module):
         # q,k,v size => (B,T,C)
 
         # resizing 
-        q = q.view(q.shape[0], q.shape[1], self.num_heads, self.head_dim).tranpose(1,2)
-        k = k.view(k.shape[0], k.shape[1], self.num_heads, self.head_dim).tranpose(1,2)
-        v = v.view(v.shape[0], v.shape[1], self.num_heads, self.head_dim).tranpose(1,2)
+        q = q.view(q.shape[0], q.shape[1], self.num_heads, self.head_dim).transpose(1,2)
+        k = k.view(k.shape[0], k.shape[1], self.num_heads, self.head_dim).transpose(1,2)
+        v = v.view(v.shape[0], v.shape[1], self.num_heads, self.head_dim).transpose(1,2)
 
         output, attention = MultiHeadAttention.attention(q, k, v, mask)
 
         # shape of output=> (B, NH, T, H)
         # shape of attention => (B, NH, SQ, SQ)
         # shape of output => (B,T,C)
-        output = output.tranpose(1,2).contiguous().view(B,T,C)
+        output = output.transpose(1,2).contiguous().view(B,T,C)
 
         return self.out(output)
     
@@ -154,6 +162,7 @@ class EncoderBlock(nn.Module):
     A single encoder block
     """
     def __init__(self, embdim, num_heads):
+        super().__init__()
         self.attn = MultiHeadAttention(embdim, num_heads)
         self.layernorm1 = LayerNormalization(embdim)
         self.ffd = FeedForward(embdim)
@@ -200,6 +209,7 @@ class Encoder(nn.Module):
     """
 
     def __init__(self, layers):
+        super().__init__()
         self.layers = layers
     
     def forward(self, x, mask):

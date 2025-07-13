@@ -67,10 +67,13 @@ class CustomDataset(Dataset):
             ]
         )
 
-        encoder_mask = (encoder_input!=torch.tensor(self.pad_token)).int()
-                
+        # if not added unsqueeze in decoder mask it will have shape of (B, SEQ)
+        # but in MHA, attentions are the shape of (B, NH, SEQ, SEQ)
+        encoder_mask = (encoder_input!=torch.tensor(self.pad_token)).unsqueeze(0).unsqueeze(0).int()
         
-        decoder_mask = (decoder_input!=torch.tensor(self.pad_token)).int()
+        # similarly for decoder_mask
+        decoder_mask = (decoder_input!=torch.tensor(self.pad_token)).unsqueeze(0).int()
+
         decoder_mask = decoder_mask & self.causal_mask(decoder_input.shape[0])
 
 
@@ -85,8 +88,10 @@ class CustomDataset(Dataset):
         }
     
     def causal_mask(self, seqlen):
+            # shape should be (1, SEQ, SEQ) if we only have (SEQ, SEQ)=> decoder_mask will be (SEQ, SEQ) a
+            # and will cause problem in MHA
             x = torch.ones(seqlen, seqlen, dtype=torch.int32)
-            x = torch.tril(x)
+            x = torch.tril(x).unsqueeze(0)
             return x
 
 

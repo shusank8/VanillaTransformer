@@ -45,7 +45,18 @@ def build_load_tokenizer(language_name, data):
         return tokenizer
 
 
-def get_data(filepath, split=False):
+def get_raw_data(filepath):
+
+    dfmain = pd.read_excel(filepath)
+
+    # making sure no nan values:
+
+    dfmain['english_sent']  = dfmain["english_sent"].apply(lambda x: str(x))
+    dfmain['nepali_sent']  = dfmain["nepali_sent"].apply(lambda x: str(x))
+    return [dfmain['english_sent'].tolist(), dfmain['nepali_sent'].tolist()]
+
+
+def get_train_data(filepath, engtokenizer, neptokenizer, split=False):
      # read the dataset
 
     dfmain = pd.read_excel(filepath)
@@ -84,7 +95,7 @@ def get_data(filepath, split=False):
         # later in tokenizer one word will be converted to two. 
 
 
-        if englen>200 or neplen>200:
+        if len(engtokenizer.encode(engobj).ids)>240 or len(neptokenizer.encode(nepobj).ids)>200:
             continue
 
         eng_com.append(engobj)
@@ -114,7 +125,7 @@ def get_data(filepath, split=False):
         return [df_train, df_test]
 
 def get_tokenizer(filepath):
-        eng_com, nep_com = get_data(filepath)
+        eng_com, nep_com = get_raw_data(filepath)
         engtokenizer = build_load_tokenizer("eng", eng_com)
         neptokenizer = build_load_tokenizer("nep", nep_com)
         return [engtokenizer, neptokenizer]

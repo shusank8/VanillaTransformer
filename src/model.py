@@ -96,7 +96,9 @@ class MultiHeadAttention(nn.Module):
         # attention
         attention_scores = (q @ k.transpose(-2, -1)) / (head_dim)**(1/2)
 
-        attention_scores.masked_fill_(mask==0, float("-inf"))
+        if mask is not None:
+            # for inference mask is None
+            attention_scores.masked_fill_(mask==0, float("-inf"))
 
         attention_scores  = attention_scores.softmax(dim=-1)
 

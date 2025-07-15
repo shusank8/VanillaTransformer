@@ -4,6 +4,7 @@ from tokenizer import get_tokenizer, get_raw_data, get_train_data
 from torch.utils.data import Dataset, DataLoader
 from CustomDataLoader import CustomDataset
 from model import build_transformer
+from validation import validation_run, inference
 
 # filepath
 dataset_path =  "/Users/shusanketbasyal/.cache/kagglehub/datasets/jigarpanjiyar/english-to-manipuri-dataset/versions/1"+"//english-nepali.xlsx"
@@ -16,10 +17,7 @@ df_train, df_test  = get_train_data(dataset_path, engtokenizer, neptokenizer, sp
 
 # creating dataset
 df_train_dataset = CustomDataset(df_train, engtokenizer, neptokenizer, "eng", "nep", 256)
-df_test_dataset = CustomDataset(df_test, engtokenizer, neptokenizer, "eng", "tgt", 256)
-
-# data_loader
-df_train_dataloader = DataLoader(df_train_dataset, batch_size=2, shuffle=True)
+df_test_dataset = CustomDataset(df_test, engtokenizer, neptokenizer, "eng", "nep", 256)
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -41,24 +39,44 @@ loss_fun = nn.CrossEntropyLoss(ignore_index=engtokenizer.token_to_id("[PAD]"), l
 
 for epoch in range(num_epochs):
 
-  df_train_dataloader = DataLoader(df_train_dataset, batch_size=batch_size, shuffle=True)
+    df_train_dataloader = DataLoader(df_train_dataset, batch_size=batch_size, shuffle=True)
 
-  for x in df_train_dataloader:
-      enc_input = x["encoder_input"].to(device)
-      dec_input = x["decoder_input"].to(device)
-      enc_mask = x["encoder_mask"].to(device)
-      dec_mask = x["decoder_mask"].to(device)
-      label = x["label"].to(device)
+    for x in df_train_dataloader:
+        enc_input = x["encoder_input"].to(device)
+        dec_input = x["decoder_input"].to(device)
+        enc_mask = x["encoder_mask"].to(device)
+        dec_mask = x["decoder_mask"].to(device)
+        label = x["label"].to(device)
 
-      encoder_output = transformer.encoder_fun(enc_input, enc_mask)
+        encoder_output = transformer.encoder_fun(enc_input, enc_mask)
 
-      decoder_output = transformer.decoder_fun(
-          dec_input, encoder_output, enc_mask, dec_mask
-      )
-      logits = transformer.projection(decoder_output)
-      # print(logits.view(-1, neptokenizer.get_vocab_size()).shape, label.view(-1).shape)
-      loss = loss_fun(logits.view(-1, neptokenizer.get_vocab_size()), label.view(-1))
-      optimizer.zero_grad(set_to_none=True)
-      loss.backward()
-      optimizer.step()
-      print(loss.item())
+        decoder_output = transformer.decoder_fun(
+            dec_input, encoder_output, enc_mask, dec_mask
+        )
+        logits = transformer.projection(decoder_output)
+        # print(logits.view(-1, neptokenizer.get_vocab_size()).shape, label.view(-1).shape)
+        loss = loss_fun(logits.view(-1, neptokenizer.get_vocab_size()), label.view(-1))
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
+        print(loss.item())
+
+        # run validation
+        val_loss = validation_run(transformer, df_test_dataset, 8, 4, device, loss_fun)
+        print("val loss=> ", val_loss)
+
+        data = {
+        "encoder_input" : x["encoder_input"][0].unsqueeze(0),
+        "decoder_input" : x["decoder_input"][0].unsqueeze(0),
+        "encoder_mask" : x["encoder_mask"][0].unsqueeze(0),
+        "decoder_mask" : x["decoder_mask"][0].unsqueeze(0),
+        "label" : x["label"][0].unsqueeze(0)
+        }
+
+
+        # generate response
+        out = inference(transformer, data, device, 200, neptokenizer )
+       
+        break
+    break
+

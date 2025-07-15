@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-def validation(model, val_dataset, example, batch_size, device, loss_fun):
+def validation_run(model, val_dataset, example, batch_size, device, loss_fun):
     model.eval()
     df_val_dataloader = DataLoader(val_dataset, batch_size)
     losses = torch.zeros(example)
@@ -21,11 +21,13 @@ def validation(model, val_dataset, example, batch_size, device, loss_fun):
         B,T,C = logits.shape
         loss = loss_fun(logits.view(-1, C), label.view(-1))
         losses[_] = loss.item()
-    return losses.mean()
+    return losses.mean().item()
 
 
 def inference(model, data, device, maxlength, tgttokenizer):
-    "data to be a single example"
+
+    # data to be a single example
+    model.eval()
     encoder_input = data['encoder_input'].to(device)
     decoder_input = data["decoder_input"].to(device)
     label = data['label'].to(device)
@@ -34,8 +36,9 @@ def inference(model, data, device, maxlength, tgttokenizer):
 
     encoder_output = model.encoder_fun(encoder_input, encoder_mask)
     eos = tgttokenizer.encode("[EOS]").ids
-    generating = torch.tensor(tgttokenizer.encode('[SOS]').ids).unsqueeze(0).unsqueeze(0)
-    while maxlength<generating.shape[-1]:
+    generating = torch.tensor(tgttokenizer.encode('[SOS]').ids).unsqueeze(0)
+    print(maxlength, generating.shape)
+    while maxlength>generating.shape[-1]:
         decoder_output = model.decoder_fun(generating, encoder_output, encoder_mask, None)
         logits = model.projection(decoder_output)
         logits = logits.softmax(dim=-1)
@@ -44,13 +47,15 @@ def inference(model, data, device, maxlength, tgttokenizer):
         nextid = torch.multinomial(logits[-1, :], num_samples=1)
         if nextid.item() == eos:
             break
+      
         generating = torch.cat(
             [
                 generating,
-                nextid.unsqueeze(0).unsqueeze(0)
+                nextid.unsqueeze(0)
             ],dim=-1
         )
     
     output = generating[0].tolist()
+   
     return tgttokenizer.decode(output)
 

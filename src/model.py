@@ -30,6 +30,8 @@ class PositionalEmbeddings(nn.Module):
     def __init__(self, seq_len, embdim):
         super().__init__()
 
+        self.dropout = nn.Dropout(0.2)
+
         # self.pe is a lookup matrix of shape (S, E), self.pe[i] represents ith seq
         self.pe = torch.zeros(seq_len, embdim) 
 
@@ -52,7 +54,7 @@ class PositionalEmbeddings(nn.Module):
         B,T,C = x.shape
         # only adding upto T (Seq len)
         x = x + self.pe[:T, :]
-        return x
+        return self.dropout(x)
 
 
 class LayerNormalization(nn.Module):
@@ -88,11 +90,14 @@ class MultiHeadAttention(nn.Module):
         assert embdim%num_heads==0, "Embdim: {embdim} must be divisible by Num_Heads: {num_heads}"
         self.num_heads = num_heads
         self.head_dim = embdim // num_heads
+        self.dropout = nn.Dropout(0.2)
     
     @staticmethod
-    def attention(q, k, v, mask):
+    def attention(q, k, v, mask, dropout):
         
         head_dim = q.shape[-1]
+
+            
         # attention
         attention_scores = (q @ k.transpose(-2, -1)) / (head_dim)**(1/2)
 
@@ -101,6 +106,8 @@ class MultiHeadAttention(nn.Module):
             attention_scores.masked_fill_(mask==0, float("-inf"))
 
         attention_scores  = attention_scores.softmax(dim=-1)
+        if dropout is not None:
+            attention_scores = dropout(attention_scores)
 
         output = attention_scores @ v
         return output, attention_scores
@@ -128,7 +135,7 @@ class MultiHeadAttention(nn.Module):
         k = k.view(k.shape[0], k.shape[1], self.num_heads, self.head_dim).transpose(1,2)
         v = v.view(v.shape[0], v.shape[1], self.num_heads, self.head_dim).transpose(1,2)
 
-        output, attention = MultiHeadAttention.attention(q, k, v, mask)
+        output, attention = MultiHeadAttention.attention(q, k, v, mask, self.dropout)
 
         # shape of output=> (B, NH, T, H)
         # shape of attention => (B, NH, SQ, SQ)
@@ -151,6 +158,7 @@ class FeedForward(nn.Module):
         self.ffd = nn.Sequential(
             nn.Linear(embdim, 4*embdim),
             nn.ReLU(),
+            nn.Dropout(0.2),
             nn.Linear(4*embdim, embdim)
         )
     
